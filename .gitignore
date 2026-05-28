@@ -1,6 +1,9 @@
 # 환경변수 (Supabase 비밀키 포함 — 절대 커밋 금지)
 .env
 
+# 스크래핑 데이터 (Supabase에 업로드 후 불필요)
+episodes.json
+
 # 디버그·임시 파일
 debug.json
 debug2.json
