@@ -631,7 +631,7 @@ function scrollBottom() {
 function addUserMessage(text) {
   const div = document.createElement('div');
   div.className = 'msg user';
-  div.innerHTML = `<div class="msg-avatar">나</div><div class="msg-bubble">${escapeHtml(text)}</div>`;
+  div.innerHTML = `<div class="msg-bubble">${escapeHtml(text)}</div>`;
   document.getElementById('chatArea').appendChild(div);
   scrollBottom();
 }
