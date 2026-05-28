@@ -339,18 +339,28 @@ async function loadFromSupabase() {
   if (SUPABASE_URL.includes('YOUR_PROJECT')) return false;
   try {
     supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    // contents + episodes 병렬 로드
-    const [contentsRes, episodesRes] = await Promise.all([
-      supabaseClient.from('contents').select('*').order('date', { ascending: false }),
-      supabaseClient.from('episodes').select('*').order('date', { ascending: true }),
-    ]);
+    // contents 로드
+    const contentsRes = await supabaseClient
+      .from('contents').select('*').order('date', { ascending: false });
     if (contentsRes.error || !contentsRes.data?.length) return false;
     CONTENTS = contentsRes.data.map(r => ({ ...r, stepId: r.step_id }));
-    // episodes를 step_id 기준으로 그룹화
+
+    // episodes 전체 로드 (Supabase max_rows=1000 한도 → 페이지네이션)
     EPISODES = {};
-    for (const ep of (episodesRes.data || [])) {
-      if (!EPISODES[ep.step_id]) EPISODES[ep.step_id] = [];
-      EPISODES[ep.step_id].push(ep);
+    const PAGE = 1000;
+    let from = 0;
+    while (true) {
+      const res = await supabaseClient
+        .from('episodes').select('*')
+        .order('step_id', { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (res.error || !res.data?.length) break;
+      for (const ep of res.data) {
+        if (!EPISODES[ep.step_id]) EPISODES[ep.step_id] = [];
+        EPISODES[ep.step_id].push(ep);
+      }
+      if (res.data.length < PAGE) break;   // 마지막 페이지
+      from += PAGE;
     }
     setDbStatus('online');
     return true;
