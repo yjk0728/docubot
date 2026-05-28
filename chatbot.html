@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>다큐프라임 콘텐츠 챗봇</title>
+
+  <!-- Supabase JS SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Malgun Gothic', '맑은 고딕', sans-serif;
+      background: #f4f5f7;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* 헤더 */
+    .header {
+      background: linear-gradient(135deg, #4B3FA0 0%, #7B5EA7 100%);
+      color: white;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      flex-shrink: 0;
+    }
+    .header-logo {
+      width: 36px; height: 36px;
+      background: white;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: bold; color: #4B3FA0; font-size: 12px;
+    }
+    .header-title { font-size: 18px; font-weight: bold; }
+    .header-sub { font-size: 12px; opacity: 0.85; margin-top: 2px; }
+    .header-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+    .header-badge {
+      background: rgba(255,255,255,0.2);
+      border-radius: 12px;
+      padding: 4px 10px;
+      font-size: 12px;
+    }
+    /* DB 상태 표시 */
+    .db-status {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 10px;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .db-status.online  { background: rgba(52,211,153,0.25); color: #6EF9C6; }
+    .db-status.offline { background: rgba(255,255,255,0.15); color: rgba(255,255,255,0.7); }
+    .db-status.loading { background: rgba(255,200,50,0.25); color: #FFD970; }
+    .db-dot { width:7px; height:7px; border-radius:50%; background: currentColor; }
+
+    /* 채팅 영역 */
+    .chat-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* 메시지 버블 */
+    .msg { display: flex; gap: 10px; max-width: 100%; }
+    .msg.user { flex-direction: row-reverse; }
+
+    .msg-avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: #4B3FA0; color: white;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: bold; flex-shrink: 0;
+    }
+    .msg.user .msg-avatar { background: #7B5EA7; }
+
+    .msg-bubble {
+      max-width: 72%;
+      background: white;
+      border-radius: 18px 18px 18px 4px;
+      padding: 12px 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+      font-size: 14px;
+      line-height: 1.6;
+      color: #222;
+    }
+    .msg.user .msg-bubble {
+      background: #4B3FA0;
+      color: white;
+      border-radius: 18px 18px 4px 18px;
+    }
+
+    /* 결과 카드 */
+    .result-cards { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+    .result-card {
+      background: #f8f7ff;
+      border: 1px solid #e0daff;
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      gap: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+      color: inherit;
+    }
+    .result-card:hover {
+      background: #ede9ff;
+      border-color: #4B3FA0;
+      transform: translateY(-1px);
+      box-shadow: 0 3px 10px rgba(75,63,160,0.15);
+    }
+    .card-thumb {
+      width: 80px; height: 56px;
+      border-radius: 8px;
+      object-fit: cover;
+      background: #ddd;
+      flex-shrink: 0;
+    }
+    .card-info { flex: 1; min-width: 0; }
+    .card-title {
+      font-weight: bold;
+      font-size: 14px;
+      color: #2a1f6e;
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .card-desc {
+      font-size: 12px;
+      color: #555;
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .card-meta { margin-top: 6px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .card-date { font-size: 11px; color: #888; }
+    .card-category {
+      font-size: 11px;
+      background: #4B3FA0;
+      color: white;
+      padding: 2px 7px;
+      border-radius: 10px;
+    }
+
+    /* 빠른 질문 버튼 */
+    .quick-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .quick-btn {
+      background: white;
+      border: 1.5px solid #4B3FA0;
+      color: #4B3FA0;
+      padding: 6px 13px;
+      border-radius: 20px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .quick-btn:hover { background: #4B3FA0; color: white; }
+
+    /* 타이핑 인디케이터 */
+    .typing { display: flex; gap: 4px; align-items: center; padding: 4px 0; }
+    .typing span {
+      width: 7px; height: 7px;
+      background: #4B3FA0;
+      border-radius: 50%;
+      animation: bounce 1.2s infinite;
+    }
+    .typing span:nth-child(2) { animation-delay: 0.2s; }
+    .typing span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce {
+      0%, 60%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-6px); }
+    }
+
+    /* 없음 안내 */
+    .no-result {
+      background: #fff8e6;
+      border: 1px solid #ffd86e;
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 13px;
+      color: #7a5a00;
+      margin-top: 6px;
+    }
+
+    /* 입력 영역 */
+    .input-area {
+      background: white;
+      border-top: 1px solid #e0e0e0;
+      padding: 14px 16px;
+      display: flex;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .input-area input {
+      flex: 1;
+      border: 1.5px solid #ddd;
+      border-radius: 24px;
+      padding: 10px 18px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+      font-family: inherit;
+    }
+    .input-area input:focus { border-color: #4B3FA0; }
+    .send-btn {
+      background: #4B3FA0;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 42px; height: 42px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      font-size: 18px;
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+    .send-btn:hover { background: #3a2f85; }
+    .send-btn:disabled { background: #ccc; cursor: not-allowed; }
+
+    /* 더 보기 */
+    .more-btn {
+      background: none;
+      border: 1.5px solid #4B3FA0;
+      color: #4B3FA0;
+      padding: 7px 18px;
+      border-radius: 20px;
+      font-size: 13px;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: all 0.2s;
+    }
+    .more-btn:hover { background: #4B3FA0; color: white; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">EBS</div>
+  <div>
+    <div class="header-title">다큐프라임 챗봇</div>
+    <div class="header-sub">원하는 다큐멘터리를 찾아드립니다</div>
+  </div>
+  <div class="header-right">
+    <div class="db-status loading" id="dbStatus">
+      <div class="db-dot"></div>
+      <span>연결 중</span>
+    </div>
+    <div class="header-badge" id="totalBadge">-개 콘텐츠</div>
+  </div>
+</div>
+
+<div class="chat-area" id="chatArea"></div>
+
+<div class="input-area">
+  <input type="text" id="userInput" placeholder="궁금한 주제나 키워드를 입력하세요..." />
+  <button class="send-btn" id="sendBtn" onclick="handleSend()" disabled>➤</button>
+</div>
+
+<script>
+// ============================================================
+// 0. Supabase 설정
+//    → 아래 두 값을 Supabase 프로젝트에서 발급한 값으로 교체하세요
+//    → Settings > API > Project URL / anon public key
+// ============================================================
+const SUPABASE_URL      = 'https://vaglnalnxxxtqmmbnflc.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_sPjOzQsrJekWljdeLqaMYA_eIJFBjw9';
+
+// 세션 식별자 (탭마다 유일, 새로고침 유지)
+const SESSION_ID = (() => {
+  let sid = sessionStorage.getItem('chatbot_session');
+  if (!sid) { sid = crypto.randomUUID(); sessionStorage.setItem('chatbot_session', sid); }
+  return sid;
+})();
+
+// ============================================================
+// 1. 데이터 로드 (Supabase 우선 → 로컬 JSON 폴백)
+// ============================================================
+let CONTENTS  = [];
+let dataReady = false;
+let supabaseClient = null;
+
+function setDbStatus(state) {
+  const el   = document.getElementById('dbStatus');
+  const map  = { loading:'loading', online:'online', offline:'offline' };
+  const text = { loading:'연결 중', online:'Supabase', offline:'로컬 데이터' };
+  el.className = `db-status ${map[state] || 'offline'}`;
+  el.innerHTML = `<div class="db-dot"></div><span>${text[state]}</span>`;
+}
+
+async function loadFromSupabase() {
+  if (SUPABASE_URL.includes('YOUR_PROJECT')) return false;
+  try {
+    supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const { data, error } = await supabaseClient
+      .from('contents')
+      .select('*')
+      .order('date', { ascending: false });
+    if (error || !data?.length) return false;
+    // Supabase 컬럼(step_id) → 챗봇 내부 키(stepId) 변환
+    CONTENTS = data.map(r => ({ ...r, stepId: r.step_id }));
+    setDbStatus('online');
+    return true;
+  } catch { return false; }
+}
+
+async function loadFromJson() {
+  try {
+    const resp = await fetch('contents.json');
+    if (!resp.ok) return false;
+    CONTENTS = await resp.json();
+    setDbStatus('offline');
+    return true;
+  } catch { return false; }
+}
+
+async function loadData() {
+  const ok = (await loadFromSupabase()) || (await loadFromJson());
+  if (ok) {
+    buildStemIndex();   // 형태소 어간 인덱스 사전 빌드
+    dataReady = true;
+    document.getElementById('totalBadge').textContent = `${CONTENTS.length}개 콘텐츠`;
+    document.getElementById('sendBtn').disabled = false;
+    showWelcome();
+  } else {
+    setDbStatus('offline');
+    addBotMessage('⚠️ 데이터를 불러올 수 없습니다.<br>scraper.py 실행 또는 Supabase 설정을 확인하세요.', true);
+  }
+}
+
+// ============================================================
+// 2. 검색 로그 → Supabase search_logs 테이블
+// ============================================================
+async function logSearch(query, resultCount, topResults) {
+  if (!supabaseClient) return;   // Supabase 미연결이면 스킵
+  try {
+    await supabaseClient.from('search_logs').insert({
+      query,
+      result_count: resultCount,
+      top_results: topResults.slice(0, 3).map(r => ({
+        step_id: r.step_id || r.stepId,
+        title:   r.title,
+        date:    r.date,
+      })),
+      session_id: SESSION_ID,
+    });
+  } catch (e) {
+    console.warn('검색 로그 저장 실패:', e.message);
+  }
+}
+
+// ============================================================
+// 3. 한국어 형태소 어간 추출기 (경량 규칙 기반, 브라우저 전용)
+// ============================================================
+// 조사·어미를 길이 내림차순으로 정렬 → 가장 긴 패턴부터 시도
+const KO_SUFFIXES = [
+  // 5자+
+  '에서부터','으로부터',
+  // 4자
+  '이라고','이라는','이라서','이라면','이라도',
+  '으로도','으로는','으로만','에게도','에게는','에게서','한테서','으로서',
+  '하지만','되지만','하여서','되어서','하여도','하여야',
+  '하였다','되었다','하였고','되었고',
+  '하는지','되는지','있는지','없는지',
+  '하면서','되면서','하거나','되거나',
+  // 3자
+  '에서','에게','한테','처럼','만큼','까지','부터','마다','밖에','조차','보다',
+  '이고','이며','이나','이든','이라','이랑',
+  '에도','에는','에만','로도','로는','로만',
+  '했다','됐다','했고','됐고','했던','됐던',
+  '한다','된다','있다','없다','하다','되다','이다',
+  '하고','되고','하며','되며','하면','되면',
+  '하지','되지','하기','되기',
+  '하는','되는','있는','없는','하여','되어',
+  '는지','는가','는데','는다',
+  '아서','어서','아도','어도','아야','어야',
+  // 2자
+  '으로','았고','었고',
+  '와','과','를','을','이','가','은','는','의','에','도','만','나','랑','로',
+  '했','됐','한','된','할','될',
+  // 1자
+  '았','었','겠','고','서','며','면','지','다',
+].sort((a, b) => b.length - a.length);  // 안전하게 내림차순 재정렬
+
+/**
+ * stemKo(word): 어절 → 어간
+ * 예) "경제적인" → "경제적", "돈을" → "돈", "은퇴했다" → "은퇴"
+ */
+function stemKo(word) {
+  if (!word || word.length <= 1) return word;
+  for (const sfx of KO_SUFFIXES) {
+    if (word.length - sfx.length >= 1 && word.endsWith(sfx)) {
+      return word.slice(0, -sfx.length);
+    }
+  }
+  return word;
+}
+
+/**
+ * tokenizeStems(text): 텍스트 → 어간 배열
+ * 공백·구두점으로 어절 분리 후 각 어절에서 stemKo 적용
+ */
+function tokenizeStems(text) {
+  return (text || '')
+    .split(/[\s,.·\-<>()[\]{}:;!?'"「」『』【】〈〉《》]+/)
+    .filter(w => w.length >= 1)
+    .map(stemKo)
+    .filter(s => s.length >= 1);
+}
+
+/**
+ * stemMatch(contentStem, queryStem): 어간 비교
+ * - 1자 쿼리: 정확 일치만 (오탐 방지 — "돈" ≠ "혼돈", "호수돈")
+ * - 2자+ 쿼리: prefix 허용  (복합어 지원 — "경제" → "경제학", "경제적")
+ */
+function stemMatch(contentStem, queryStem) {
+  if (!queryStem) return false;
+  if (queryStem.length <= 1) return contentStem === queryStem;
+  return contentStem === queryStem || contentStem.startsWith(queryStem);
+}
+
+/**
+ * buildStemIndex(): 전체 콘텐츠 어간 인덱스 사전 빌드 (데이터 로드 직후 1회)
+ * 각 item에 _titleStems, _descStems 배열을 추가
+ */
+function buildStemIndex() {
+  for (const item of CONTENTS) {
+    item._titleStems = tokenizeStems(item.title);
+    item._descStems  = tokenizeStems(item.description);
+  }
+}
+
+// ============================================================
+// 4. 검색 엔진 (클라이언트 사이드)
+// ============================================================
+const CATEGORY_KEYWORDS = {
+  '자연': ['자연/생태'], '생태': ['자연/생태'], '동물': ['자연/생태'],
+  '과학': ['과학'], '역사': ['역사'], '인문': ['인문'],
+  '교육': ['교육', '학교교육'], '학교': ['학교교육', '교육'],
+  '의학': ['의학'], '건강': ['의학'],
+  '경제': ['경제/경영'], '경영': ['경제/경영'],
+  '사회': ['정치/사회'], '정치': ['정치/사회'],
+  '예술': ['예술/대중문화'], '문화': ['예술/대중문화', '인류/문명'],
+  '인류': ['인류/문명'], '문명': ['인류/문명'],
+  '육아': ['육아'], '아이': ['육아'],
+  '가정': ['가정'], '가족': ['가정', '육아'],
+};
+
+function search(query, limit = 50) {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+
+  const yearMatch    = q.match(/20(\d{2})/);
+  const targetYear   = yearMatch ? `20${yearMatch[1]}` : null;
+
+  let targetCategories = [];
+  for (const [kw, cats] of Object.entries(CATEGORY_KEYWORDS)) {
+    if (q.includes(kw)) targetCategories.push(...cats);
+  }
+
+  const sortByViews = /인기|많이|조회|추천/.test(q);
+
+  // 1글자 조사·불용어 (length >= 1 허용 후 여기서 제거)
+  const STOP = new Set(['다큐', '추천', '알려', '줘', '찾아', '보여', '관련', '관한',
+    '주제', '있어', '있나', '있는', '것', '거', '년', '에', '의', '을', '를',
+    '은', '는', '이', '가', '과', '도', '로', '만', '서', '나', '좀',
+    '그리고', '인기', '많이', '최신', '조회', '방영', '방송']);
+  // length >= 1 로 변경 → "돈", "빚" 같은 한 글자 핵심어 허용
+  let tokens = q.split(/\s+/).filter(t => t.length >= 1 && !STOP.has(t));
+  tokens = tokens.filter(t => !/^20\d{2}년?$/.test(t));
+  for (const kw of Object.keys(CATEGORY_KEYWORDS)) tokens = tokens.filter(t => t !== kw);
+
+  // 연도만 있고 다른 키워드 없으면 → 해당 연도 전체
+  if (targetYear && tokens.length === 0 && targetCategories.length === 0) {
+    return CONTENTS.filter(item => item.date?.startsWith(targetYear)).slice(0, limit);
+  }
+
+  // 공백 제거 정규화 함수 (한국어 붙여쓰기/띄어쓰기 불일치 대응)
+  const norm = s => s.replace(/\s+/g, '');
+
+  // 부제명 추출 함수: "1부. <돈을 믿습니까>" 또는 "1부 제목명" 형태의 텍스트 수집
+  const extractSubtitles = desc => {
+    const matches = [];
+    // "<…>" 꺽쇠 부제 패턴
+    for (const m of (desc.matchAll(/<([^>]+)>/g) || [])) matches.push(m[1].toLowerCase());
+    // "N부. 제목" 패턴 뒤 텍스트
+    for (const m of (desc.matchAll(/\d+부[.·]\s*([^\-\n]{2,20})/g) || [])) matches.push(m[1].trim().toLowerCase());
+    return matches;
+  };
+
+  const scored = CONTENTS.map(item => {
+    let score = 0;
+    const titleLower    = (item.title       || '').toLowerCase();
+    const descLower     = (item.description || '').toLowerCase();
+    const cat           =  item.category    || '';
+    const subtitles     = extractSubtitles(descLower);
+
+    // 공백 제거 버전 (붙여쓰기 검색 대응)
+    const titleNorm = norm(titleLower);
+    const descNorm  = norm(descLower);
+
+    if (targetYear && !item.date?.startsWith(targetYear)) return { item, score: -1 };
+    if (targetCategories.length > 0 && targetCategories.includes(cat)) score += 3;
+
+    for (const token of tokens) {
+      const tokenNorm = norm(token);
+      const tokenStem = stemKo(token);
+      // 3자 미만 단어는 substring 오탐이 많아 어간 매칭만 사용
+      // 예) "돈" → "혼돈", "호수돈" 에 걸리지 않도록
+      const useSub = token.length >= 3;
+
+      // ① 제목 매칭: (3자+일 때) 원문/공백정규화 포함 | 어간 매칭
+      const titleHit =
+        (useSub && (titleLower.includes(token) || titleNorm.includes(tokenNorm))) ||
+        (item._titleStems || []).some(s => stemMatch(s, tokenStem));
+      if (titleHit) score += 5;
+
+      // ② 부제명 매칭: <…>, N부. 형태 텍스트에서도 어간 비교
+      const subHit = subtitles.some(s =>
+        (useSub && (s.includes(token) || norm(s).includes(tokenNorm))) ||
+        stemMatch(stemKo(s), tokenStem)
+      );
+      if (subHit) score += 4;
+
+      // ③ 설명 매칭: (3자+일 때) 원문/공백정규화 포함 | 어간 매칭
+      const descHit =
+        (useSub && (descLower.includes(token) || descNorm.includes(tokenNorm))) ||
+        (item._descStems || []).some(s => stemMatch(s, tokenStem));
+      if (descHit) score += 2;
+    }
+    if (tokens.length === 0 && targetCategories.length > 0 && targetCategories.includes(cat)) score += 5;
+
+    return { item, score };
+  }).filter(x => x.score > 0);
+
+  if (sortByViews) {
+    scored.sort((a, b) => {
+      const va = parseInt((a.item.views || '0').replace(/,/g,'')) || 0;
+      const vb = parseInt((b.item.views || '0').replace(/,/g,'')) || 0;
+      return vb - va;
+    });
+  } else {
+    scored.sort((a, b) => b.score - a.score);
+  }
+  return scored.slice(0, limit).map(x => x.item);
+}
+
+// ============================================================
+// 4. NLU
+// ============================================================
+function parseIntent(q) {
+  const lower = q.toLowerCase();
+  if (/안녕|반가|하이|hi/.test(lower))                               return { type: 'greet' };
+  if (/몇\s*개|총|전체|목록/.test(lower) && !/검색|찾/.test(lower)) return { type: 'count' };
+  if (/최신|새로운|최근/.test(lower) && q.split(/\s+/).length <= 2)  return { type: 'latest' };
+  if (/인기|많이\s*본/.test(lower)   && q.split(/\s+/).length <= 2)  return { type: 'popular' };
+  if (/도움|사용법|어떻게|뭐가/.test(lower))                         return { type: 'help' };
+  return { type: 'search', query: q };
+}
+
+// ============================================================
+// 5. 응답 생성
+// ============================================================
+function generateResponse(userMsg) {
+  const intent = parseIntent(userMsg);
+
+  if (intent.type === 'greet') return {
+    text: '안녕하세요! EBS 다큐프라임 콘텐츠 검색 챗봇입니다 👋<br>찾고 싶은 주제나 키워드를 입력하시면 관련 다큐멘터리를 추천해드릴게요.',
+    quickBtns: ['자연 생태', 'AI 관련', '2025년 방영', '인기 있는 것'],
+  };
+
+  if (intent.type === 'help') return {
+    text: '이런 방식으로 검색해보세요:<br>• <b>주제어</b>: "AI", "환경", "교육", "역사"<br>• <b>카테고리</b>: "자연 다큐", "과학 관련"<br>• <b>연도</b>: "2025년 방영된 것"<br>• <b>인기순</b>: "많이 본 다큐"',
+    quickBtns: ['과학 다큐', '자연 생태', '2024년 방영', '인기 다큐'],
+  };
+
+  if (intent.type === 'count') return {
+    text: `현재 다큐프라임 콘텐츠는 총 <b>${CONTENTS.length}개</b>가 등록되어 있습니다.`,
+  };
+
+  if (intent.type === 'latest') {
+    const latest = CONTENTS.slice(0, 5);
+    logSearch(userMsg, latest.length, latest);
+    return { text: `최신 다큐프라임 콘텐츠 <b>${latest.length}편</b>입니다.`, results: latest };
+  }
+
+  if (intent.type === 'popular') {
+    const popular = [...CONTENTS]
+      .sort((a,b) => (parseInt((b.views||'0').replace(/,/g,''))||0) - (parseInt((a.views||'0').replace(/,/g,''))||0))
+      .slice(0, 5);
+    logSearch(userMsg, popular.length, popular);
+    return { text: `조회수 기준 인기 콘텐츠 <b>TOP 5</b>입니다.`, results: popular };
+  }
+
+  const results = search(userMsg, 50);
+  const show    = results.slice(0, 5);
+
+  // 검색 로그 비동기 저장 (검색 결과와 무관)
+  logSearch(userMsg, results.length, results);
+
+  if (results.length === 0) return { noResult: true, query: userMsg };
+
+  return {
+    text: `<b>"${userMsg}"</b> 검색 결과 ${results.length}건을 찾았습니다.`,
+    results: show,
+    allResults: results,
+  };
+}
+
+// ============================================================
+// 6. UI 렌더링
+// ============================================================
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function scrollBottom() {
+  const el = document.getElementById('chatArea');
+  el.scrollTop = el.scrollHeight;
+}
+
+function addUserMessage(text) {
+  const div = document.createElement('div');
+  div.className = 'msg user';
+  div.innerHTML = `<div class="msg-avatar">나</div><div class="msg-bubble">${escapeHtml(text)}</div>`;
+  document.getElementById('chatArea').appendChild(div);
+  scrollBottom();
+}
+
+function addBotMessage(html, raw = false) {
+  const div = document.createElement('div');
+  div.className = 'msg bot';
+  div.innerHTML = `<div class="msg-avatar">EBS</div><div class="msg-bubble">${html}</div>`;
+  document.getElementById('chatArea').appendChild(div);
+  scrollBottom();
+  return div.querySelector('.msg-bubble');
+}
+
+function renderCards(bubble, results, allResults) {
+  const cards = document.createElement('div');
+  cards.className = 'result-cards';
+
+  const renderCard = (item) => {
+    const link = item.url || `https://docuprime.ebs.co.kr/docuprime/newReplayList?courseId=BP0PAPB0000000005&stepId=${item.step_id || item.stepId}`;
+    const card = document.createElement('a');
+    card.className = 'result-card';
+    card.href      = link;
+    card.target    = '_blank';
+    card.innerHTML = `
+      <img class="card-thumb" src="${escapeHtml(item.thumbnail || '')}"
+           onerror="this.style.background='#ccc';this.style.opacity='0.4'"
+           alt="${escapeHtml(item.title)}">
+      <div class="card-info">
+        <div class="card-title">${escapeHtml(item.title)}</div>
+        ${item.description ? `<div class="card-desc">${escapeHtml(item.description.slice(0, 100))}</div>` : ''}
+        <div class="card-meta">
+          <span class="card-date">📅 ${item.date || ''}</span>
+          ${item.category ? `<span class="card-category">${escapeHtml(item.category)}</span>` : ''}
+          ${item.views ? `<span class="card-date">👁 ${item.views}</span>` : ''}
+        </div>
+      </div>`;
+    return card;
+  };
+
+  results.forEach(item => cards.appendChild(renderCard(item)));
+  bubble.appendChild(cards);
+
+  if (allResults && allResults.length > 5) {
+    let shown = 5;
+    const moreBtn = document.createElement('button');
+    moreBtn.className = 'more-btn';
+    moreBtn.textContent = `더 보기 (${allResults.length - shown}개 남음)`;
+    moreBtn.onclick = () => {
+      const next = allResults.slice(shown, shown + 5);
+      shown += 5;
+      next.forEach(item => cards.appendChild(renderCard(item)));
+      if (shown >= allResults.length) moreBtn.remove();
+      else moreBtn.textContent = `더 보기 (${allResults.length - shown}개 남음)`;
+      scrollBottom();
+    };
+    bubble.appendChild(moreBtn);
+  }
+  scrollBottom();
+}
+
+function addQuickBtns(bubble, btns) {
+  if (!btns?.length) return;
+  const div = document.createElement('div');
+  div.className = 'quick-btns';
+  btns.forEach(q => {
+    const btn = document.createElement('button');
+    btn.className = 'quick-btn';
+    btn.textContent = q;
+    btn.onclick = () => sendMessage(q);
+    div.appendChild(btn);
+  });
+  bubble.appendChild(div);
+}
+
+function addTyping() {
+  const div = document.createElement('div');
+  div.className = 'msg bot'; div.id = 'typing';
+  div.innerHTML = `<div class="msg-avatar">EBS</div><div class="msg-bubble"><div class="typing"><span></span><span></span><span></span></div></div>`;
+  document.getElementById('chatArea').appendChild(div);
+  scrollBottom();
+}
+function removeTyping() { document.getElementById('typing')?.remove(); }
+
+function showWelcome() {
+  const bubble = addBotMessage(
+    `안녕하세요! 👋 <b>EBS 다큐프라임 콘텐츠 챗봇</b>입니다.<br>` +
+    `총 <b>${CONTENTS.length}개</b>의 다큐멘터리 중에서 원하는 콘텐츠를 찾아드릴게요.<br><br>` +
+    `주제어, 카테고리, 방영 연도 등으로 검색해보세요!`
+  );
+  addQuickBtns(bubble, ['자연 생태', 'AI 인공지능', '2025년 방영', '인기 많은 것', '과학 다큐', '역사']);
+}
+
+// ============================================================
+// 7. 메시지 처리
+// ============================================================
+async function sendMessage(text) {
+  if (!text.trim() || !dataReady) return;
+  addUserMessage(text);
+  document.getElementById('userInput').value = '';
+  document.getElementById('sendBtn').disabled = true;
+
+  addTyping();
+  await new Promise(r => setTimeout(r, 380));
+  removeTyping();
+
+  const resp = generateResponse(text);
+
+  if (resp.noResult) {
+    const bubble = addBotMessage(`<b>"${escapeHtml(resp.query)}"</b>에 해당하는 콘텐츠를 찾지 못했습니다.`);
+    const div = document.createElement('div');
+    div.className = 'no-result';
+    div.innerHTML = '💡 다른 키워드나 주제어로 다시 검색해보세요.<br>예: "환경", "인공지능", "역사", "건강"';
+    bubble.appendChild(div);
+    addQuickBtns(bubble, ['과학 다큐', '자연 생태', '역사', '교육']);
+  } else {
+    const bubble = addBotMessage(resp.text || '');
+    if (resp.results?.length) renderCards(bubble, resp.results, resp.allResults);
+    if (resp.quickBtns)       addQuickBtns(bubble, resp.quickBtns);
+  }
+
+  document.getElementById('sendBtn').disabled = false;
+}
+
+function handleSend() {
+  const val = document.getElementById('userInput').value.trim();
+  if (val) sendMessage(val);
+}
+
+document.getElementById('userInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
+});
+
+// 초기화
+loadData();
+</script>
+</body>
+</html>

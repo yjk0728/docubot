@@ -1,0 +1,25 @@
+# 환경변수 (Supabase 비밀키 포함 — 절대 커밋 금지)
+.env
+
+# 디버그·임시 파일
+debug.json
+debug2.json
+cat_check.json
+cat_mapping.json
+cats_debug.json
+money_check.json
+stat.json
+scraper_output.txt
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# Claude Code
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
