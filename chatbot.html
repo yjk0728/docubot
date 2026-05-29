@@ -560,9 +560,12 @@ function search(query, limit = 50) {
   //   → 카테고리 보너스(+3)와 텍스트 매칭(+5) 모두 적용 가능
   //   → "아이의 시간" 등 카테고리 키워드가 포함된 제목도 정상 검색됨
 
-  // 연도만 있고 다른 키워드 없으면 → 해당 연도 전체
+  // 연도만 있고 다른 키워드 없으면 → 해당 연도 전체 (최신방송일자 순)
   if (targetYear && tokens.length === 0 && targetCategories.length === 0) {
-    return CONTENTS.filter(item => item.date?.startsWith(targetYear)).slice(0, limit);
+    return CONTENTS
+      .filter(item => item.date?.startsWith(targetYear))
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+      .slice(0, limit);
   }
 
   // 카테고리 키워드만 있고 텍스트 토큰이 없는 순수 카테고리 검색 감지
@@ -644,7 +647,16 @@ function search(query, limit = 50) {
       return vb - va;
     });
   } else {
-    scored.sort((a, b) => b.score - a.score);
+    // 1순위: 제목 완전 일치 항목 최상단 / 2순위: 최신 방송일자 순
+    const qNorm = q.replace(/\s+/g, '').toLowerCase();
+    scored.sort((a, b) => {
+      const aTitleNorm = (a.item.title || '').replace(/\s+/g, '').toLowerCase();
+      const bTitleNorm = (b.item.title || '').replace(/\s+/g, '').toLowerCase();
+      const aExact = aTitleNorm === qNorm;
+      const bExact = bTitleNorm === qNorm;
+      if (aExact !== bExact) return aExact ? -1 : 1;
+      return (b.item.date || '').localeCompare(a.item.date || '');
+    });
   }
   return scored.slice(0, limit).map(x => x.item);
 }
