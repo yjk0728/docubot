@@ -830,14 +830,7 @@ function renderCards(bubble, results, allResults) {
         // 펼칠 때: 토글 버튼이 화면 안에 보이도록 스크롤
         // 접을 때: 카드 상단이 화면 밖으로 벗어났으면 카드 상단으로 스크롤
         requestAnimationFrame(() => {
-          if (isOpen) {
-            toggle.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          } else {
-            const cardRect = card.getBoundingClientRect();
-            if (cardRect.top < 0) {
-              card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-          }
+          toggle.scrollIntoView({ behavior: 'smooth', block: 'center' });
         });
       };
 
