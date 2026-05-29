@@ -475,11 +475,16 @@ function stemKo(word) {
  * 공백·구두점으로 어절 분리 후 각 어절에서 stemKo 적용
  */
 function tokenizeStems(text) {
-  return (text || '')
+  const words = (text || '')
     .split(/[\s,.·\-<>()[\]{}:;!?'"「」『』【】〈〉《》]+/)
-    .filter(w => w.length >= 1)
-    .map(stemKo)
-    .filter(s => s.length >= 1);
+    .filter(w => w.length >= 1);
+  const result = new Set();
+  for (const w of words) {
+    result.add(w);           // 원형도 보관 (예: "아이" 단독 등장 시 보존)
+    const s = stemKo(w);
+    if (s) result.add(s);   // 어간도 보관 (예: "아이의" → "아이")
+  }
+  return [...result];
 }
 
 /**
@@ -551,12 +556,18 @@ function search(query, limit = 50) {
   // length >= 1 로 변경 → "돈", "빚" 같은 한 글자 핵심어 허용
   let tokens = q.split(/\s+/).filter(t => t.length >= 1 && !STOP.has(t));
   tokens = tokens.filter(t => !/^20\d{2}년?$/.test(t));
-  for (const kw of Object.keys(CATEGORY_KEYWORDS)) tokens = tokens.filter(t => t !== kw);
+  // ※ 카테고리 키워드("아이", "자연" 등)는 토큰에서 제거하지 않음
+  //   → 카테고리 보너스(+3)와 텍스트 매칭(+5) 모두 적용 가능
+  //   → "아이의 시간" 등 카테고리 키워드가 포함된 제목도 정상 검색됨
 
   // 연도만 있고 다른 키워드 없으면 → 해당 연도 전체
   if (targetYear && tokens.length === 0 && targetCategories.length === 0) {
     return CONTENTS.filter(item => item.date?.startsWith(targetYear)).slice(0, limit);
   }
+
+  // 카테고리 키워드만 있고 텍스트 토큰이 없는 순수 카테고리 검색 감지
+  const catOnlyTokens = tokens.filter(t => Object.keys(CATEGORY_KEYWORDS).includes(t));
+  const isCatOnly = tokens.length > 0 && tokens.every(t => Object.keys(CATEGORY_KEYWORDS).includes(t));
 
   // 공백 제거 정규화 함수 (한국어 붙여쓰기/띄어쓰기 불일치 대응)
   const norm = s => s.replace(/\s+/g, '');
@@ -587,7 +598,9 @@ function search(query, limit = 50) {
 
     for (const token of tokens) {
       const tokenNorm = norm(token);
-      const tokenStem = stemKo(token);
+      // 2글자 이하 쿼리는 stemKo 금지 (예: "아이"→"아" 오탐 방지)
+      // "아이", "돈", "빚" 같은 짧은 핵심어는 원형 그대로 매칭
+      const tokenStem = token.length >= 3 ? stemKo(token) : token;
       // 3자 미만 단어는 substring 오탐이 많아 어간 매칭만 사용
       // 예) "돈" → "혼돈", "호수돈" 에 걸리지 않도록
       const useSub = token.length >= 3;
@@ -618,7 +631,8 @@ function search(query, limit = 50) {
       );
       if (epTitleHit) score += 3;
     }
-    if (tokens.length === 0 && targetCategories.length > 0 && targetCategories.includes(cat)) score += 5;
+    // 순수 카테고리 검색이거나 토큰이 없을 때: 카테고리 일치 항목에 추가 점수
+    if ((tokens.length === 0 || isCatOnly) && targetCategories.length > 0 && targetCategories.includes(cat)) score += 5;
 
     return { item, score };
   }).filter(x => x.score > 0);
